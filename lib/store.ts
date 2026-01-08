@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { CellBase, Matrix, Point } from "react-spreadsheet";
-import { CellData, SpreadsheetData, pointToCellRef } from "@/types/spreadsheet";
+import { CellData, SpreadsheetData, pointToCellRef, FileData } from "@/types/spreadsheet";
 
 // Default grid size
 const DEFAULT_ROWS = 50;
@@ -38,6 +38,7 @@ interface SpreadsheetState {
   setData: (data: SpreadsheetData) => void;
   setCellValue: (row: number, col: number, value: string) => void;
   setCellFormula: (row: number, col: number, formula: string) => void;
+  setCellFile: (row: number, col: number, file: FileData | null) => void;
   setSelectedCells: (cells: Point[]) => void;
   setActiveCell: (cell: Point | null) => void;
   setCellLoading: (row: number, col: number, loading: boolean) => void;
@@ -93,7 +94,24 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
         newData[row] = [];
       }
       newData[row] = [...newData[row]];
-      newData[row][col] = { ...newData[row][col], formula };
+      const existingCell = newData[row][col] || { value: "" };
+      newData[row][col] = { ...existingCell, value: existingCell.value || "", formula };
+      return { data: newData };
+    }),
+
+  setCellFile: (row, col, file) =>
+    set((state) => {
+      const newData = [...state.data];
+      if (!newData[row]) {
+        newData[row] = [];
+      }
+      newData[row] = [...newData[row]];
+      newData[row][col] = { 
+        ...newData[row][col], 
+        file: file || undefined,
+        // Set the value to the filename if file is provided
+        value: file ? `📎 ${file.name}` : newData[row][col]?.value || "",
+      };
       return { data: newData };
     }),
 
@@ -116,7 +134,8 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
         newData[row] = [];
       }
       newData[row] = [...newData[row]];
-      newData[row][col] = { ...newData[row][col], isLoading: loading };
+      const existingCell = newData[row][col] || { value: "" };
+      newData[row][col] = { ...existingCell, value: existingCell.value || "", isLoading: loading };
       
       return { loadingCells: newLoadingCells, data: newData };
     }),
@@ -128,8 +147,10 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
         newData[row] = [];
       }
       newData[row] = [...newData[row]];
+      const existingCell = newData[row][col] || { value: "" };
       newData[row][col] = { 
-        ...newData[row][col], 
+        ...existingCell, 
+        value: existingCell.value || "",
         error: error || undefined 
       };
       return { data: newData };
@@ -266,6 +287,7 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
       row: cell.row,
       col: cell.column,
       value: state.data[cell.row]?.[cell.column]?.value || "",
+      file: state.data[cell.row]?.[cell.column]?.file,
     }));
   },
 }));

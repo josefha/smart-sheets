@@ -25,6 +25,8 @@ import {
   pointToCellRef,
   cellRefToPoint,
   columnIndexToLabel,
+  FileData,
+  formatFileSize,
 } from "@/types/spreadsheet";
 
 type OutputLocation = "next-column" | "replace" | "below" | "custom";
@@ -94,6 +96,23 @@ export function LLMFormulaDialog({
     }
   }, [selectedCells, outputLocation, customStartCell]);
 
+  // Check if any selected cells have files
+  const hasFileCells = useMemo(() => {
+    return selectedCells.some((cell) => data[cell.row]?.[cell.column]?.file);
+  }, [selectedCells, data]);
+
+  // Get cell info for display
+  const selectedCellsInfo = useMemo(() => {
+    return selectedCells.map((cell) => {
+      const cellData = data[cell.row]?.[cell.column];
+      return {
+        ref: pointToCellRef(cell),
+        value: cellData?.value || "",
+        file: cellData?.file,
+      };
+    });
+  }, [selectedCells, data]);
+
   const handleApply = async () => {
     if (
       !prompt.trim() ||
@@ -104,12 +123,16 @@ export function LLMFormulaDialog({
 
     setIsProcessing(true);
 
-    // Get values from the captured selection
-    const selectedValues = selectedCells.map((cell) => ({
-      row: cell.row,
-      col: cell.column,
-      value: data[cell.row]?.[cell.column]?.value || "",
-    }));
+    // Get values from the captured selection, including file data
+    const selectedValues = selectedCells.map((cell) => {
+      const cellData = data[cell.row]?.[cell.column];
+      return {
+        row: cell.row,
+        col: cell.column,
+        value: cellData?.value || "",
+        file: cellData?.file,
+      };
+    });
 
     // Set loading state for all output cells
     for (const output of outputCellRefs) {
@@ -161,9 +184,6 @@ export function LLMFormulaDialog({
     }
   };
 
-  const selectedRefs = selectedCells
-    .map((cell) => pointToCellRef(cell))
-    .join(", ");
   const outputRefs = outputCellRefs.map((o) => o.ref).join(", ");
 
   // Suggested output column (next column after first selected cell)
@@ -171,6 +191,10 @@ export function LLMFormulaDialog({
     selectedCells.length > 0
       ? columnIndexToLabel(selectedCells[0].column + 1)
       : "B";
+
+  // Count file vs text cells
+  const fileCellCount = selectedCellsInfo.filter((c) => c.file).length;
+  const textCellCount = selectedCellsInfo.length - fileCellCount;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -183,6 +207,12 @@ export function LLMFormulaDialog({
           <DialogDescription>
             Enter a prompt to apply to each selected cell and choose where to
             place the results.
+            {hasFileCells && (
+              <span className="block mt-1 text-primary">
+                📎 {fileCellCount} file{fileCellCount !== 1 ? "s" : ""} selected
+                - GPT-4 Vision will be used.
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -190,9 +220,62 @@ export function LLMFormulaDialog({
           {/* Selected Cells */}
           <div className="space-y-2">
             <Label>Selected Cells (Input)</Label>
-            <div className="text-sm text-muted-foreground font-mono bg-muted px-3 py-2 rounded-md max-h-20 overflow-auto">
-              {selectedRefs || "No cells selected"}
+            <div className="text-sm bg-muted px-3 py-2 rounded-md max-h-32 overflow-auto space-y-1.5">
+              {selectedCellsInfo.length === 0 ? (
+                <span className="text-muted-foreground">No cells selected</span>
+              ) : (
+                selectedCellsInfo.map((cell, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-muted-foreground w-8">
+                      {cell.ref}
+                    </span>
+                    {cell.file ? (
+                      <div className="flex items-center gap-2 text-primary">
+                        {cell.file.type === "image" ? (
+                          <>
+                            <img
+                              src={cell.file.dataUrl}
+                              alt={cell.file.name}
+                              className="h-6 w-6 object-cover rounded"
+                            />
+                            <span className="text-xs truncate max-w-[200px]">
+                              {cell.file.name}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <FileIcon className="h-4 w-4" />
+                            <span className="text-xs truncate max-w-[200px]">
+                              {cell.file.name}
+                            </span>
+                          </>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          ({formatFileSize(cell.file.size)})
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs truncate max-w-[280px] text-foreground">
+                        {cell.value || (
+                          <span className="text-muted-foreground italic">
+                            empty
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
+            {selectedCellsInfo.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {textCellCount > 0 &&
+                  `${textCellCount} text cell${textCellCount !== 1 ? "s" : ""}`}
+                {textCellCount > 0 && fileCellCount > 0 && ", "}
+                {fileCellCount > 0 &&
+                  `${fileCellCount} file${fileCellCount !== 1 ? "s" : ""}`}
+              </p>
+            )}
           </div>
 
           {/* Prompt */}
@@ -439,6 +522,24 @@ function TargetIcon({ className }: { className?: string }) {
       <circle cx="12" cy="12" r="10" />
       <circle cx="12" cy="12" r="6" />
       <circle cx="12" cy="12" r="2" />
+    </svg>
+  );
+}
+
+function FileIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+      <polyline points="14 2 14 8 20 8" />
     </svg>
   );
 }
