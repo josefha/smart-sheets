@@ -1,14 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { useSpreadsheetStore } from "@/lib/store";
 import { pointToCellRef } from "@/types/spreadsheet";
 import { isFormula, isLLMFormula, isMathFormula } from "@/lib/formulas";
 
 export function FormulaBar() {
-  const { activeCell, data, setCellValue } = useSpreadsheetStore();
+  const { 
+    activeCell, 
+    data, 
+    setCellValue,
+    formulaEditing,
+    startFormulaEditing,
+    updateFormulaValue,
+    endFormulaEditing,
+  } = useSpreadsheetStore();
+  
   const [inputValue, setInputValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Get the actual stored value (formula or plain value)
   const storedValue = activeCell
@@ -18,31 +28,101 @@ export function FormulaBar() {
   // Update input when active cell changes - show the formula, not the computed value
   useEffect(() => {
     setInputValue(storedValue);
+    // End formula editing when cell changes
+    if (formulaEditing.isEditing) {
+      endFormulaEditing();
+    }
   }, [storedValue, activeCell]);
+
+  // Sync with formula editing state from store (when cell references are inserted)
+  useEffect(() => {
+    if (formulaEditing.isEditing && formulaEditing.formulaValue !== inputValue) {
+      setInputValue(formulaEditing.formulaValue);
+      // Restore cursor position after update
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.setSelectionRange(
+            formulaEditing.cursorPosition,
+            formulaEditing.cursorPosition
+          );
+          inputRef.current.focus();
+        }
+      }, 0);
+    }
+  }, [formulaEditing.formulaValue, formulaEditing.cursorPosition, formulaEditing.isEditing]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      setInputValue(e.target.value);
+      const newValue = e.target.value;
+      const cursorPos = e.target.selectionStart || 0;
+      setInputValue(newValue);
+      
+      // Start or update formula editing mode
+      if (newValue.startsWith("=")) {
+        if (!formulaEditing.isEditing) {
+          startFormulaEditing(newValue, cursorPos);
+        } else {
+          updateFormulaValue(newValue, cursorPos);
+        }
+      } else if (formulaEditing.isEditing) {
+        endFormulaEditing();
+      }
     },
-    []
+    [formulaEditing.isEditing, startFormulaEditing, updateFormulaValue, endFormulaEditing]
   );
+
+  const handleSelect = useCallback(
+    (e: React.SyntheticEvent<HTMLInputElement>) => {
+      const target = e.target as HTMLInputElement;
+      const cursorPos = target.selectionStart || 0;
+      
+      // Update cursor position in store if in formula editing mode
+      if (formulaEditing.isEditing) {
+        updateFormulaValue(inputValue, cursorPos);
+      }
+    },
+    [formulaEditing.isEditing, inputValue, updateFormulaValue]
+  );
+
+  const handleFocus = useCallback(() => {
+    // Start formula editing if the current value is a formula
+    if (inputValue.startsWith("=") && !formulaEditing.isEditing) {
+      const cursorPos = inputRef.current?.selectionStart || inputValue.length;
+      startFormulaEditing(inputValue, cursorPos);
+    }
+  }, [inputValue, formulaEditing.isEditing, startFormulaEditing]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter" && activeCell) {
         setCellValue(activeCell.row, activeCell.column, inputValue);
+        endFormulaEditing();
       } else if (e.key === "Escape") {
         setInputValue(storedValue);
+        endFormulaEditing();
       }
     },
-    [activeCell, inputValue, setCellValue, storedValue]
+    [activeCell, inputValue, setCellValue, storedValue, endFormulaEditing]
   );
 
   const handleBlur = useCallback(() => {
-    if (activeCell && inputValue !== storedValue) {
-      setCellValue(activeCell.row, activeCell.column, inputValue);
-    }
-  }, [activeCell, inputValue, setCellValue, storedValue]);
+    // Small delay to allow cell click events to be processed first
+    setTimeout(() => {
+      if (activeCell && inputValue !== storedValue) {
+        setCellValue(activeCell.row, activeCell.column, inputValue);
+      }
+      // Only end formula editing if we're not clicking on a cell to add reference
+      if (!formulaEditing.isEditing) {
+        return;
+      }
+      // Check if the focus moved to the spreadsheet (for cell selection)
+      const activeElement = document.activeElement;
+      const isSpreadsheetClick = activeElement?.closest('.sheet-container');
+      if (!isSpreadsheetClick) {
+        endFormulaEditing();
+      }
+    }, 100);
+  }, [activeCell, inputValue, setCellValue, storedValue, formulaEditing.isEditing, endFormulaEditing]);
 
   const cellRef = activeCell ? pointToCellRef(activeCell) : "";
   const formulaType = isLLMFormula(inputValue)
@@ -52,6 +132,9 @@ export function FormulaBar() {
     : isFormula(inputValue)
     ? "formula"
     : null;
+
+  // Show indicator when in formula editing mode
+  const isInFormulaMode = formulaEditing.isEditing && inputValue.startsWith("=");
 
   return (
     <div className="formula-bar flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/20">
@@ -75,16 +158,26 @@ export function FormulaBar() {
       
       <div className="flex-1 relative">
         <Input
+          ref={inputRef}
           value={inputValue}
           onChange={handleChange}
+          onSelect={handleSelect}
+          onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           placeholder={activeCell ? "Enter value or formula (e.g., =SUM(A1:A5))" : "Select a cell to edit"}
           disabled={!activeCell}
-          className="h-8 font-mono text-sm bg-background border-border"
+          className={`h-8 font-mono text-sm bg-background border-border ${
+            isInFormulaMode ? "ring-2 ring-primary/50" : ""
+          }`}
         />
-        {formulaType && (
-          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+          {isInFormulaMode && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-primary/20 text-primary animate-pulse">
+              Click cells to add
+            </span>
+          )}
+          {formulaType && !isInFormulaMode && (
             <span className={`text-xs px-1.5 py-0.5 rounded ${
               formulaType === "llm" 
                 ? "bg-primary/20 text-primary" 
@@ -92,8 +185,8 @@ export function FormulaBar() {
             }`}>
               {formulaType.toUpperCase()}
             </span>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

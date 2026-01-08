@@ -319,3 +319,38 @@
 .formula-bar {
   background: var(--card);
 }
+
+/* Formula editing mode */
+.formula-editing-mode {
+  cursor: cell;
+}
+
+.formula-editing-mode .Spreadsheet__cell {
+  cursor: cell;
+  position: relative;
+}
+
+.formula-editing-mode .Spreadsheet__cell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  pointer-events: none;
+  transition: background-color 0.15s ease;
+}
+
+.formula-editing-mode .Spreadsheet__cell:hover::after {
+  background: oklch(0.55 0.18 165 / 0.15);
+}
+
+.formula-editing-mode .Spreadsheet__cell:hover {
+  outline: 2px dashed var(--primary);
+  outline-offset: -2px;
+  z-index: 2;
+}
+
+/* Visual feedback for referenced cells */
+.cell-referenced {
+  background: oklch(0.55 0.18 165 / 0.2) !important;
+  box-shadow: inset 0 0 0 2px var(--primary);
+}

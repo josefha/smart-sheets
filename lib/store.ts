@@ -13,6 +13,13 @@ function createEmptyMatrix(rows: number, cols: number): SpreadsheetData {
   );
 }
 
+interface FormulaEditingState {
+  isEditing: boolean;
+  formulaValue: string;
+  cursorPosition: number;
+  rangeStart: Point | null;  // For shift-click range selection
+}
+
 interface SpreadsheetState {
   // Data
   data: SpreadsheetData;
@@ -20,6 +27,9 @@ interface SpreadsheetState {
   // Selection state
   selectedCells: Point[];
   activeCell: Point | null;
+  
+  // Formula editing state
+  formulaEditing: FormulaEditingState;
   
   // Loading states
   loadingCells: Set<string>;
@@ -32,6 +42,13 @@ interface SpreadsheetState {
   setActiveCell: (cell: Point | null) => void;
   setCellLoading: (row: number, col: number, loading: boolean) => void;
   setCellError: (row: number, col: number, error: string | null) => void;
+  
+  // Formula editing actions
+  startFormulaEditing: (value: string, cursorPosition: number) => void;
+  updateFormulaValue: (value: string, cursorPosition: number) => void;
+  insertCellReference: (point: Point, isRange: boolean, isAdditive: boolean) => string;
+  endFormulaEditing: () => void;
+  setFormulaRangeStart: (point: Point | null) => void;
   
   // Batch operations
   setCellValues: (updates: Array<{ row: number; col: number; value: string }>) => void;
@@ -48,6 +65,12 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
   selectedCells: [],
   activeCell: null,
   loadingCells: new Set(),
+  formulaEditing: {
+    isEditing: false,
+    formulaValue: "",
+    cursorPosition: 0,
+    rangeStart: null,
+  },
 
   // Actions
   setData: (data) => set({ data }),
@@ -127,6 +150,104 @@ export const useSpreadsheetStore = create<SpreadsheetState>((set, get) => ({
       }
       return { data: newData };
     }),
+
+  // Formula editing actions
+  startFormulaEditing: (value, cursorPosition) =>
+    set({
+      formulaEditing: {
+        isEditing: true,
+        formulaValue: value,
+        cursorPosition,
+        rangeStart: null,
+      },
+    }),
+
+  updateFormulaValue: (value, cursorPosition) =>
+    set((state) => ({
+      formulaEditing: {
+        ...state.formulaEditing,
+        formulaValue: value,
+        cursorPosition,
+      },
+    })),
+
+  insertCellReference: (point, isRange, isAdditive) => {
+    const state = get();
+    const { formulaValue, cursorPosition, rangeStart } = state.formulaEditing;
+    const cellRef = pointToCellRef(point);
+    
+    let newValue: string;
+    let newCursorPos: number;
+    
+    if (isRange && rangeStart) {
+      // Create range reference like A1:B3
+      const startRef = pointToCellRef(rangeStart);
+      const rangeRef = `${startRef}:${cellRef}`;
+      
+      // Find and replace the start reference with the range
+      const beforeCursor = formulaValue.slice(0, cursorPosition);
+      const afterCursor = formulaValue.slice(cursorPosition);
+      
+      // Check if the last thing before cursor is the start reference
+      if (beforeCursor.endsWith(startRef)) {
+        newValue = beforeCursor.slice(0, -startRef.length) + rangeRef + afterCursor;
+        newCursorPos = cursorPosition - startRef.length + rangeRef.length;
+      } else {
+        // Just insert the range
+        newValue = beforeCursor + rangeRef + afterCursor;
+        newCursorPos = cursorPosition + rangeRef.length;
+      }
+    } else if (isAdditive) {
+      // Add comma and new reference (Cmd/Ctrl+click)
+      const beforeCursor = formulaValue.slice(0, cursorPosition);
+      const afterCursor = formulaValue.slice(cursorPosition);
+      
+      // Check if we need a comma
+      const needsComma = beforeCursor.length > 0 && 
+        !beforeCursor.endsWith("(") && 
+        !beforeCursor.endsWith(",") &&
+        !beforeCursor.endsWith(" ");
+      
+      const insertion = needsComma ? `, ${cellRef}` : cellRef;
+      newValue = beforeCursor + insertion + afterCursor;
+      newCursorPos = cursorPosition + insertion.length;
+    } else {
+      // Simple insertion at cursor
+      const beforeCursor = formulaValue.slice(0, cursorPosition);
+      const afterCursor = formulaValue.slice(cursorPosition);
+      newValue = beforeCursor + cellRef + afterCursor;
+      newCursorPos = cursorPosition + cellRef.length;
+    }
+    
+    set({
+      formulaEditing: {
+        isEditing: true,
+        formulaValue: newValue,
+        cursorPosition: newCursorPos,
+        rangeStart: isRange ? null : point, // Set for potential range, clear after range complete
+      },
+    });
+    
+    return newValue;
+  },
+
+  endFormulaEditing: () =>
+    set({
+      formulaEditing: {
+        isEditing: false,
+        formulaValue: "",
+        cursorPosition: 0,
+        rangeStart: null,
+      },
+    }),
+
+  setFormulaRangeStart: (point) =>
+    set((state) => ({
+      formulaEditing: {
+        ...state.formulaEditing,
+        rangeStart: point,
+      },
+    })),
 
   // Computed
   getCell: (row, col) => {

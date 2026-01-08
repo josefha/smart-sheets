@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useEffect, useRef } from "react";
 import Spreadsheet, { 
   CellBase, 
   Matrix, 
@@ -19,7 +19,17 @@ interface SheetProps {
 }
 
 export function Sheet({ onSelectionChange }: SheetProps) {
-  const { data, setData, setSelectedCells, setActiveCell } = useSpreadsheetStore();
+  const { 
+    data, 
+    setData, 
+    setSelectedCells, 
+    setActiveCell,
+    formulaEditing,
+    insertCellReference,
+    setFormulaRangeStart,
+  } = useSpreadsheetStore();
+  
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Generate column labels (A, B, C, ...)
   const columnLabels = useMemo(() => {
@@ -31,6 +41,65 @@ export function Sheet({ onSelectionChange }: SheetProps) {
   const rowLabels = useMemo(() => {
     return Array.from({ length: data.length }, (_, i) => String(i + 1));
   }, [data]);
+
+  // Handle cell clicks during formula editing mode
+  useEffect(() => {
+    if (!formulaEditing.isEditing || !containerRef.current) return;
+
+    const handleCellClick = (e: MouseEvent) => {
+      // Find the clicked cell
+      const target = e.target as HTMLElement;
+      const cell = target.closest('.Spreadsheet__cell');
+      if (!cell) return;
+
+      // Get cell coordinates from the table structure
+      const row = cell.closest('tr');
+      if (!row) return;
+      
+      const tbody = row.closest('tbody');
+      if (!tbody) return;
+      
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      // First row is the header row, so we subtract 1 to get the data row index
+      const rowIndex = rows.indexOf(row as HTMLTableRowElement) - 1;
+      
+      const cells = Array.from(row.querySelectorAll('.Spreadsheet__cell'));
+      const colIndex = cells.indexOf(cell as HTMLElement);
+      
+      // Skip if clicking on header row or invalid cell
+      if (rowIndex < 0 || colIndex < 0) return;
+
+      // Prevent default cell selection behavior
+      e.preventDefault();
+      e.stopPropagation();
+
+      const clickedPoint: Point = { row: rowIndex, column: colIndex };
+      
+      // Check for modifier keys
+      const isMetaOrCtrl = e.metaKey || e.ctrlKey;  // Cmd on Mac, Ctrl on Windows
+      const isShift = e.shiftKey;
+
+      if (isShift && formulaEditing.rangeStart) {
+        // Complete range selection (A1:B3)
+        insertCellReference(clickedPoint, true, false);
+      } else if (isMetaOrCtrl) {
+        // Add another reference with comma (A1, A2)
+        insertCellReference(clickedPoint, false, true);
+      } else {
+        // Single reference - also set as potential range start
+        insertCellReference(clickedPoint, false, false);
+        setFormulaRangeStart(clickedPoint);
+      }
+    };
+
+    // Use capture phase to intercept before react-spreadsheet handles it
+    const container = containerRef.current;
+    container.addEventListener('mousedown', handleCellClick, true);
+
+    return () => {
+      container.removeEventListener('mousedown', handleCellClick, true);
+    };
+  }, [formulaEditing.isEditing, formulaEditing.rangeStart, insertCellReference, setFormulaRangeStart]);
 
   // Transform data to evaluate formulas for display
   const displayData = useMemo((): Matrix<CellBase> => {
@@ -166,7 +235,12 @@ export function Sheet({ onSelectionChange }: SheetProps) {
   );
 
   return (
-    <div className="sheet-container w-full h-full overflow-auto">
+    <div 
+      ref={containerRef}
+      className={`sheet-container w-full h-full overflow-auto ${
+        formulaEditing.isEditing ? 'formula-editing-mode' : ''
+      }`}
+    >
       <Spreadsheet
         data={displayData}
         onChange={handleChange}
