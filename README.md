@@ -1,36 +1,138 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Smart Sheets - LLM-Powered Spreadsheet
+
+A Google Sheets-like application built with Next.js, TypeScript, and React. Features both mathematical formulas and LLM-powered formulas using OpenAI.
+
+## Features
+
+- **Spreadsheet Interface**: Full-featured spreadsheet with cell editing, navigation, and selection
+- **Math Formulas**: Excel-compatible formulas like `=SUM(A1:A5)`, `=AVERAGE(B1:B10)`, `=IF(A1>5, "yes", "no")`
+- **LLM Formulas**: AI-powered formulas using OpenAI, e.g., `=LLM("summarize", A1)`
+- **Batch LLM Processing**: Select multiple cells and apply LLM operations to all of them
+- **Modern UI**: Built with Shadcn UI components and Tailwind CSS
+
+## Tech Stack
+
+- **Framework**: Next.js 14+ with App Router
+- **Language**: TypeScript
+- **UI**: Shadcn UI, Tailwind CSS
+- **Spreadsheet**: react-spreadsheet
+- **Formula Parsing**: hot-formula-parser
+- **State Management**: Zustand
+- **LLM Integration**: OpenAI API
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+- OpenAI API key
+
+### Installation
+
+1. Clone the repository and install dependencies:
+
+```bash
+cd smart-sheets
+npm install
+```
+
+2. Set up environment variables:
+
+```bash
+cp env.example .env.local
+```
+
+Then edit `.env.local` and add your OpenAI API key:
+
+```
+OPENAI_API_KEY=sk-your-api-key-here
+```
+
+3. Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Usage
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Basic Cell Editing
 
-## Learn More
+- Click on any cell to select it
+- Start typing to enter a value
+- Press Enter to confirm and move to the next row
+- Use arrow keys to navigate between cells
 
-To learn more about Next.js, take a look at the following resources:
+### Math Formulas
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Enter formulas starting with `=`:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `=SUM(A1:A5)` - Sum of cells A1 through A5
+- `=AVERAGE(A1:A10)` - Average of cells
+- `=MIN(A1:A10)` - Minimum value
+- `=MAX(A1:A10)` - Maximum value
+- `=IF(A1>5, "Yes", "No")` - Conditional logic
+- `=A1+B1*2` - Mathematical expressions
 
-## Deploy on Vercel
+### LLM Formulas
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Use the `=LLM()` function for AI-powered operations:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `=LLM("summarize this text")` - Direct prompt
+- `=LLM("translate to Spanish", A1)` - Process cell A1 with the prompt
+
+### Batch LLM Processing
+
+1. Select multiple cells containing data (click and drag)
+2. Click the "Apply LLM" button in the toolbar
+3. Enter a prompt (e.g., "translate to French")
+4. Click Apply - results will appear in the adjacent column
+
+## Project Structure
+
+```
+smart-sheets/
+├── app/
+│   ├── api/llm/route.ts      # OpenAI API endpoint
+│   ├── globals.css           # Global styles
+│   ├── layout.tsx            # Root layout
+│   └── page.tsx              # Main page
+├── components/
+│   ├── spreadsheet/
+│   │   ├── Sheet.tsx         # Main spreadsheet component
+│   │   ├── Toolbar.tsx       # Toolbar with actions
+│   │   ├── FormulaBar.tsx    # Formula input bar
+│   │   └── LLMFormulaDialog.tsx  # LLM batch dialog
+│   └── ui/                   # Shadcn UI components
+├── lib/
+│   ├── store.ts              # Zustand state management
+│   ├── formulas/
+│   │   ├── parser.ts         # Formula parser
+│   │   ├── llm-formulas.ts   # LLM formula processing
+│   │   └── types.ts          # Formula types
+│   └── utils.ts              # Utility functions
+└── types/
+    └── spreadsheet.ts        # TypeScript types
+```
+
+## Development
+
+### Running Tests
+
+```bash
+npm test
+```
+
+### Building for Production
+
+```bash
+npm run build
+npm start
+```
+
+## License
+
+MIT
