@@ -210,7 +210,6 @@ export function LLMFormulaDialog({
             {hasFileCells && (
               <span className="block mt-1 text-primary">
                 📎 {fileCellCount} file{fileCellCount !== 1 ? "s" : ""} selected
-                - GPT-4 Vision will be used.
               </span>
             )}
           </DialogDescription>

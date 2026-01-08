@@ -33,11 +33,6 @@ interface CellResult {
   error?: string;
 }
 
-// Helper to check if any cell has a file
-function hasFiles(cells: CellInput[]): boolean {
-  return cells.some(cell => cell.file);
-}
-
 // Helper to build message content for a cell
 function buildMessageContent(prompt: string, cell: CellInput): ChatCompletionContentPart[] {
   const content: ChatCompletionContentPart[] = [];
@@ -97,15 +92,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Model selection (as of Jan 2026):
-    // - gpt-4o: Best for vision/image analysis (multimodal)
-    // - gpt-4o-mini: Cost-effective for text-only tasks
-    // - o1-mini: Advanced reasoning (use for complex analysis)
-    // - gpt-5: Latest flagship (if available in your API tier)
-    const needsVision = hasFiles(cells);
-    
-    // Use gpt-4o for vision tasks, gpt-4o-mini for text (fast & cheap)
-    // You can change to "o1-mini" for better reasoning on complex prompts
-    const model = needsVision ? "gpt-4o" : "gpt-4o-mini";
+    // GPT-5.2 with image support - "instant" mode for fast responses
+    // - gpt-5.2-chat-latest: Fast "instant" mode with vision support
+    // - gpt-5.2: "Thinking" mode for complex reasoning
+    // - gpt-5.2-pro: Pro version for highest accuracy
+    const model = "gpt-5.2-chat-latest";
 
     // Process each cell in parallel
     const results: CellResult[] = await Promise.all(
@@ -139,8 +130,7 @@ export async function POST(request: NextRequest) {
           const completion = await openai.chat.completions.create({
             model,
             messages,
-            max_tokens: 500,
-            temperature: 0.7,
+            max_completion_tokens: 500,
           });
 
           const result =
